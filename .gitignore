@@ -2,3 +2,8 @@ abootimg
 version.h
 *.o
 *.swp
+bootimg.cfg
+dt.img
+initrd.img
+stage2.img
+zImage

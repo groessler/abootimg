@@ -1,5 +1,6 @@
 /* abootimg -  Manipulate (read, modify, create) Android Boot Images
  * Copyright (c) 2010-2011 Gilles Grandou <gilles@grandou.net>
+ * Copyright (c) 2017 Christian Groessler <chris@groessler.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -75,6 +76,7 @@ typedef struct
   char*        kernel_fname;
   char*        ramdisk_fname;
   char*        second_fname;
+  char*        dt_fname;
 
   FILE*        stream;
 
@@ -134,6 +136,7 @@ void print_usage(void)
   printf (
  " abootimg - manipulate Android Boot Images.\n"
  " (c) 2010-2011 Gilles Grandou <gilles@grandou.net>\n"
+ " (c) 2017 Christian Groessler <chris@groessler.org>\n"
  " " VERSION_STR "\n"
  "\n"
  " abootimg [-h]\n"
@@ -144,13 +147,14 @@ void print_usage(void)
  "\n"
  "      print boot image information\n"
  "\n"
- " abootimg -x <bootimg> [<bootimg.cfg> [<kernel> [<ramdisk> [<secondstage>]]]]\n"
+ " abootimg -x <bootimg> [<bootimg.cfg> [<kernel> [<ramdisk> [<secondstage> [dt]]]]]\n"
  "\n"
  "      extract objects from boot image:\n"
  "      - config file (default name bootimg.cfg)\n"
  "      - kernel image (default name zImage)\n"
  "      - ramdisk image (default name initrd.img)\n"
  "      - second stage image (default name stage2.img)\n"
+ "      - dt image (default name dt.img)\n"
  "\n"
  " abootimg -u <bootimg> [-c \"param=value\"] [-f <bootimg.cfg>] [-k <kernel>] [-r <ramdisk>] [-s <secondstage>]\n"
  "\n"
@@ -212,7 +216,7 @@ enum command parse_args(int argc, char** argv, t_abootimg* img)
         return none;
       img->fname = argv[2];
       break;
-      
+
     case extract:
       if ((argc < 3) || (argc > 7))
         return none;
@@ -225,6 +229,8 @@ enum command parse_args(int argc, char** argv, t_abootimg* img)
         img->ramdisk_fname = argv[5];
       if (argc >= 7)
         img->second_fname = argv[6];
+      if (argc >= 8)
+        img->dt_fname = argv[7];
       break;
 
     case update:
@@ -236,6 +242,7 @@ enum command parse_args(int argc, char** argv, t_abootimg* img)
       img->kernel_fname = NULL;
       img->ramdisk_fname = NULL;
       img->second_fname = NULL;
+      img->dt_fname = NULL;
       for(i=3; i<argc; i++) {
         if (!strcmp(argv[i], "-c")) {
           if (++i >= argc)
@@ -271,7 +278,7 @@ enum command parse_args(int argc, char** argv, t_abootimg* img)
       }
       break;
   }
-  
+
   return cmd;
 }
 
@@ -337,7 +344,7 @@ void check_if_block_device(t_abootimg* img)
     int fd = open(img->fname, O_RDONLY);
     if (fd == -1)
       abort_perror(img->fname);
-    
+
     unsigned long long bsize = 0;
     if (blkgetsize(fd, &bsize))
       abort_perror(img->fname);
@@ -405,7 +412,7 @@ void update_header_entry(t_abootimg* img, char* cmd)
   p = cmd;
   p += strspn(p, " \t");
   token = p;
-  
+
   p += strcspn(p, " =\t");
   endtoken = p;
   p += strspn(p, " \t");
@@ -419,10 +426,10 @@ void update_header_entry(t_abootimg* img, char* cmd)
   *endtoken = '\0';
 
   unsigned valuenum = strtoul(value, NULL, 0);
-  
+
   if (!strcmp(token, "cmdline")) {
     unsigned len = strlen(value);
-    if (len >= BOOT_ARGS_SIZE) 
+    if (len >= BOOT_ARGS_SIZE)
       abort_printf("cmdline length (%d) is too long (max %d)", len, BOOT_ARGS_SIZE-1);
     memset(img->header.cmdline, 0, BOOT_ARGS_SIZE);
     strcpy((char*)(img->header.cmdline), value);
@@ -719,7 +726,7 @@ void print_bootimg_info(t_abootimg* img)
   printf ("  ramdisk size      = %u bytes (%.2f MB)\n", ramdisk_size, (double)ramdisk_size/0x100000);
   if (second_size)
     printf ("  second stage size = %u bytes (%.2f MB)\n", ramdisk_size, (double)ramdisk_size/0x100000);
- 
+
   printf ("\n* load addresses:\n");
   printf ("  kernel:       0x%08x\n", img->header.kernel_addr);
   printf ("  ramdisk:      0x%08x\n", img->header.ramdisk_addr);
@@ -759,7 +766,7 @@ void write_bootimg_config(t_abootimg* img)
 
   fprintf(config_file, "name = %s\n", img->header.name);
   fprintf(config_file, "cmdline = %s\n", img->header.cmdline);
-  
+
   fclose(config_file);
 }
 
@@ -782,7 +789,7 @@ void extract_kernel(t_abootimg* img)
   size_t rb = fread(k, ksize, 1, img->stream);
   if ((rb!=1) || ferror(img->stream))
     abort_perror(img->fname);
- 
+
   FILE* kernel_file = fopen(img->kernel_fname, "w");
   if (!kernel_file)
     abort_perror(img->kernel_fname);
@@ -809,7 +816,7 @@ void extract_ramdisk(t_abootimg* img)
   printf ("extracting ramdisk in %s\n", img->ramdisk_fname);
 
   void* r = malloc(rsize);
-  if (!r) 
+  if (!r)
     abort_perror(NULL);
 
   if (fseek(img->stream, roffset, SEEK_SET))
@@ -818,7 +825,7 @@ void extract_ramdisk(t_abootimg* img)
   size_t rb = fread(r, rsize, 1, img->stream);
   if ((rb!=1) || ferror(img->stream))
     abort_perror(img->fname);
- 
+
   FILE* ramdisk_file = fopen(img->ramdisk_fname, "w");
   if (!ramdisk_file)
     abort_perror(img->ramdisk_fname);
@@ -829,6 +836,35 @@ void extract_ramdisk(t_abootimg* img)
 
   fclose(ramdisk_file);
   free(r);
+
+#if 0  /* dump remaining input file data */
+
+  int st = 0;
+  long curpos = ftell(img->stream);
+  if (curpos & (psize - 1))
+    st = fseek(img->stream, (curpos + psize - 1) & ~(psize - 1), SEEK_SET);
+  if (st) {
+    fprintf(stderr, "cpg seek failed\n");
+  }
+  r = malloc((psize + ksize + rsize) * 2);
+  if (!r)
+    abort_perror(NULL);
+  rb = fread(r, 1, (psize + ksize + rsize) * 2, img->stream);
+  if (rb) {
+    printf("%lu bytes at the end saved in 'excess.bin'\n", (unsigned long)rb);
+    FILE* excess_file = fopen("excess.bin", "w");
+    if (!excess_file)
+      abort_perror("excess.bin");
+
+    fwrite(r, rb, 1, excess_file);
+    if (ferror(excess_file))
+      abort_perror("excess.bin");
+
+    fclose(excess_file);
+  }
+  free(r);
+
+#endif /* if 0 */
 }
 
 
@@ -843,12 +879,12 @@ void extract_second(t_abootimg* img)
   if (!ssize) // Second Stage not present
     return;
 
-  unsigned n = (rsize + ksize + psize - 1) / psize;
+  unsigned n = (rsize + ksize + psize - 1) / psize; //@@@ correct?
   unsigned soffset = (1+n)*psize;
 
   printf ("extracting second stage image in %s\n", img->second_fname);
 
-  void* s = malloc(ksize);
+  void* s = malloc(ssize);
   if (!s)
     abort_perror(NULL);
 
@@ -858,7 +894,7 @@ void extract_second(t_abootimg* img)
   size_t rb = fread(s, ssize, 1, img->stream);
   if ((rb!=1) || ferror(img->stream))
     abort_perror(img->fname);
- 
+
   FILE* second_file = fopen(img->second_fname, "w");
   if (!second_file)
     abort_perror(img->second_fname);
@@ -866,6 +902,52 @@ void extract_second(t_abootimg* img)
   fwrite(s, ssize, 1, second_file);
   if (ferror(second_file))
     abort_perror(img->second_fname);
+
+  fclose(second_file);
+  free(s);
+}
+
+
+
+void extract_dt(t_abootimg* img)
+{
+  unsigned psize = img->header.page_size;
+  unsigned ksize = img->header.kernel_size;
+  unsigned rsize = img->header.ramdisk_size;
+  unsigned ssize = img->header.second_size;
+
+  unsigned n = (rsize + psize - 1) / psize;
+  n += (ksize + psize - 1) / psize;
+  n += (ssize + psize - 1) / psize;
+  unsigned doffset = (1+n)*psize;
+
+  printf ("extracting device tree image in %s\n", img->dt_fname);
+
+#define XXX_DT_SIZE 4*1024*1024   // ad-hoc value
+  void* s = malloc(XXX_DT_SIZE);
+  if (!s)
+    abort_perror(NULL);
+
+  if (fseek(img->stream, doffset, SEEK_SET))
+    abort_perror(img->fname);
+
+  size_t rb = fread(s, 1, XXX_DT_SIZE, img->stream);
+  if ((rb==0) || ferror(img->stream))
+    abort_perror(img->fname);
+
+  // we read everything until end-of-file
+  // if the last 16 bytes contain the string "SEANDROIDENFORCE",
+  // strip it
+  if (rb >= 16 && !memcmp(s + rb - 16, "SEANDROIDENFORCE", 16))
+    rb -= 16;
+
+  FILE* second_file = fopen(img->dt_fname, "w");
+  if (!second_file)
+    abort_perror(img->dt_fname);
+
+  fwrite(s, rb, 1, second_file);
+  if (ferror(second_file))
+    abort_perror(img->dt_fname);
 
   fclose(second_file);
   free(s);
@@ -885,6 +967,7 @@ t_abootimg* new_bootimg()
   img->kernel_fname = "zImage";
   img->ramdisk_fname = "initrd.img";
   img->second_fname = "stage2.img";
+  img->dt_fname = "dt.img";
 
   memcpy(img->header.magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
   img->header.page_size = 2048;  // a sensible default page size
@@ -921,8 +1004,9 @@ int main(int argc, char** argv)
       extract_kernel(bootimg);
       extract_ramdisk(bootimg);
       extract_second(bootimg);
+      extract_dt(bootimg);
       break;
-    
+
     case update:
       open_bootimg(bootimg, "r+");
       read_header(bootimg);
@@ -948,5 +1032,3 @@ int main(int argc, char** argv)
 
   return 0;
 }
-
-
