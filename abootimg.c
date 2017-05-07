@@ -836,35 +836,6 @@ void extract_ramdisk(t_abootimg* img)
 
   fclose(ramdisk_file);
   free(r);
-
-#if 0  /* dump remaining input file data */
-
-  int st = 0;
-  long curpos = ftell(img->stream);
-  if (curpos & (psize - 1))
-    st = fseek(img->stream, (curpos + psize - 1) & ~(psize - 1), SEEK_SET);
-  if (st) {
-    fprintf(stderr, "cpg seek failed\n");
-  }
-  r = malloc((psize + ksize + rsize) * 2);
-  if (!r)
-    abort_perror(NULL);
-  rb = fread(r, 1, (psize + ksize + rsize) * 2, img->stream);
-  if (rb) {
-    printf("%lu bytes at the end saved in 'excess.bin'\n", (unsigned long)rb);
-    FILE* excess_file = fopen("excess.bin", "w");
-    if (!excess_file)
-      abort_perror("excess.bin");
-
-    fwrite(r, rb, 1, excess_file);
-    if (ferror(excess_file))
-      abort_perror("excess.bin");
-
-    fclose(excess_file);
-  }
-  free(r);
-
-#endif /* if 0 */
 }
 
 
@@ -927,6 +898,7 @@ void extract_dt(t_abootimg* img)
   void* s = malloc(XXX_DT_SIZE);
   if (!s)
     abort_perror(NULL);
+  void* s2 = s;
 
   if (fseek(img->stream, doffset, SEEK_SET))
     abort_perror(img->fname);
@@ -941,11 +913,15 @@ void extract_dt(t_abootimg* img)
   if (rb >= 16 && !memcmp(s + rb - 16, "SEANDROIDENFORCE", 16))
     rb -= 16;
 
+  // if there is a 'QCDT' header, strip it (@@@ make it optional)
+  if (!memcmp(s, "QCDT", 4))
+    s2 += 0x800;
+
   FILE* second_file = fopen(img->dt_fname, "w");
   if (!second_file)
     abort_perror(img->dt_fname);
 
-  fwrite(s, rb, 1, second_file);
+  fwrite(s2, rb, 1, second_file);
   if (ferror(second_file))
     abort_perror(img->dt_fname);
 

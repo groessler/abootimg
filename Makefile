@@ -17,7 +17,7 @@ version.h:
 abootimg.o: bootimg.h version.h
 
 clean:
-	rm -f abootimg *.o version.h
+	rm -f abootimg *.o version.h bootimg.cfg zImage initrd.img dt.img stage2.img
 
 .PHONY:	clean all
 
