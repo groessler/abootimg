@@ -913,9 +913,14 @@ void extract_dt(t_abootimg* img)
   if (rb >= 16 && !memcmp(s + rb - 16, "SEANDROIDENFORCE", 16))
     rb -= 16;
 
+#if 0
   // if there is a 'QCDT' header, strip it (@@@ make it optional)
   if (!memcmp(s, "QCDT", 4))
     s2 += 0x800;
+#else
+  if (rb > 0x800 + 3 && ! memcmp(s + 0x800, "\xd0\x0d\xfe\xed", 4))
+    s2 += 0x800;
+#endif
 
   FILE* second_file = fopen(img->dt_fname, "w");
   if (!second_file)
