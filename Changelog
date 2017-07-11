@@ -1,3 +1,8 @@
+2017/07/11 - v0.7cpg
+
+	* add support for extracting DT images as found
+	  on Samsung S5 and S7
+
 2011/07/14 - v0.6
 
 	* fixes block device support, broken in v0.5
