@@ -1,6 +1,6 @@
 /* abootimg -  Manipulate (read, modify, create) Android Boot Images
  * Copyright (c) 2010-2011 Gilles Grandou <gilles@grandou.net>
- * Copyright (c) 2017 Christian Groessler <chris@groessler.org>
+ * Copyright (c) 2017,2021 Christian Groessler <chris@groessler.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -296,10 +296,12 @@ int check_boot_img_header(t_abootimg* img)
     return 1;
   }
 
+  /*
   if (!(img->header.ramdisk_size)) {
     fprintf(stderr, "%s: ramdisk size is null\n", img->fname);
     return 1;
   }
+  */
 
   unsigned page_size = img->header.page_size;
   if (!page_size) {
@@ -738,6 +740,9 @@ void print_bootimg_info(t_abootimg* img)
     printf ("* cmdline = %s\n\n", img->header.cmdline);
   else
     printf ("* empty cmdline\n");
+
+  if (img->header.extra_cmdline[0])
+    printf ("* extra_cmdline = %s\n\n", img->header.extra_cmdline);
 
   printf ("* id = ");
   int i;
